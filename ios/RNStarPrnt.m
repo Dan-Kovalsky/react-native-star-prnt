@@ -590,7 +590,7 @@ RCT_REMAP_METHOD(print, portName:(NSString *)portName
                 //wait for image to catched from webview
             }
             UIImage *image = _image;
-            [builder appendBitmap:image width:width];
+            [builder appendBitmap:image diffusion:YES width:width bothScale:YES];
         }
 
     }
