@@ -11,8 +11,15 @@
 #import <StarIO_Extension/StarIoExt.h>
 #import <StarIO_Extension/StarIoExtManager.h>
 #import "Communication.h"
+#import <React/RCTLog.h>
+#import <WebKit/WebKit.h>
+#import <UIKit/UIKit.h>
 
 @implementation RNStarPrnt
+{
+    WKWebView* _webView;
+    UIImage* _image;
+}
 
  bool RNStarPrnt_hasListeners;
 
@@ -50,28 +57,28 @@ RCT_REMAP_METHOD(portDiscovery, portType:(NSString *)portType
                  rejecter:(RCTPromiseRejectBlock)reject)
 {
     NSMutableArray *info = [[NSMutableArray alloc] init];
-    
+
     if ([portType isEqualToString:@"All"] || [portType isEqualToString:@"Bluetooth"]) {
         NSArray *btPortInfoArray = [SMPort searchPrinter:@"BT:"];
         for (PortInfo *p in btPortInfoArray) {
             [info addObject:[self portInfoToDictionary:p]];
         }
     }
-    
+
     if ([portType isEqualToString:@"All"] || [portType isEqualToString:@"LAN"]) {
         NSArray *lanPortInfoArray = [SMPort searchPrinter:@"TCP:"];
         for (PortInfo *p in lanPortInfoArray) {
             [info addObject:[self portInfoToDictionary:p]];
         }
     }
-    
+
     if ([portType isEqualToString:@"All"] || [portType isEqualToString:@"BluetoothLE"]) {
         NSArray *btPortInfoArray = [SMPort searchPrinter:@"BLE:"];
         for (PortInfo *p in btPortInfoArray) {
             [info addObject:[self portInfoToDictionary:p]];
         }
     }
-    
+
     if ([portType isEqualToString:@"All"] || [portType isEqualToString:@"USB"]) {
         NSArray *usbPortInfoArray = [SMPort searchPrinter:@"USB:"];
         for (PortInfo *p in usbPortInfoArray) {
@@ -95,17 +102,17 @@ RCT_REMAP_METHOD(checkStatus, portName:(NSString *)portName
     StarPrinterStatus_2 status;
     NSString *portSettings = [self getPortSettingsOption:emulation];
     @try {
-        
+
         port = [SMPort getPort:portName :portSettings :10000];     // 10000mS!!!
-        
+
         // Sleep to avoid a problem which sometimes cannot communicate with Bluetooth.
-        
+
         NSOperatingSystemVersion version = {11, 0, 0};
         BOOL isOSVer11OrLater = [[NSProcessInfo processInfo] isOperatingSystemAtLeastVersion:version];
         if ((isOSVer11OrLater) && ([portName.uppercaseString hasPrefix:@"BT:"])) {
             [NSThread sleepForTimeInterval:0.2];
         }
-        
+
         [port getParsedStatus:&status :2];
         NSDictionary *firmwareInformation = [[NSMutableDictionary alloc] init];
         @try {
@@ -114,7 +121,7 @@ RCT_REMAP_METHOD(checkStatus, portName:(NSString *)portName
         @catch (PortException *exception) {
             //unable to get Firmware
         }
-        
+
         NSDictionary *statusDictionary = [self portStatusToDictionary:status :firmwareInformation];
         resolve (statusDictionary);
     }
@@ -136,7 +143,7 @@ RCT_REMAP_METHOD(connect, portName:(NSString *)portName
 {
 
         NSString *portSettings = [self getPortSettingsOption:emulation];
-    
+
         if (portName != nil && portName != (id)[NSNull null]){
             if ([hasBarcodeReader isEqual:@(YES)]) {
                 _printerManager = [[StarIoExtManager alloc] initWithType:StarIoExtManagerTypeWithBarcodeReader
@@ -151,8 +158,8 @@ RCT_REMAP_METHOD(connect, portName:(NSString *)portName
             }
             _printerManager.delegate = self;
         }
-    
-    
+
+
         if ([_printerManager connect] == NO) {
             NSDictionary *userInfo = @{
                                        NSLocalizedDescriptionKey: NSLocalizedString(@"Fail to Open Port", nil),
@@ -161,18 +168,18 @@ RCT_REMAP_METHOD(connect, portName:(NSString *)portName
                                        };
             NSError *error = [[NSError alloc] initWithDomain:@"StarPrntErrorDomain"
                                                         code:-1 userInfo:userInfo];
-            
+
             reject(@"Fail to Open Port.", @"",error);
-            
+
         }else{
             BOOL result = YES;
             NSMutableDictionary *resultMessage = [[NSMutableDictionary alloc] init];
             [resultMessage setObject:[NSNumber numberWithBool:result == SM_TRUE] forKey:@"result"];
             [resultMessage setObject:@"Send Commands" forKey:@"title"];
             [resultMessage setObject:@"Printer Connected!" forKey:@"message"];
-    
+
             resolve(resultMessage);
-            
+
         }
 }
 RCT_REMAP_METHOD(disconnect,
@@ -188,18 +195,18 @@ RCT_REMAP_METHOD(disconnect,
                                        };
             NSError *error = [[NSError alloc] initWithDomain:@"StarPrntErrorDomain"
                                                         code:-1 userInfo:userInfo];
-            
+
             reject(@"Communication Error.", @"",error);
-            
+
         }else{
             BOOL result = YES;
             NSMutableDictionary *resultMessage = [[NSMutableDictionary alloc] init];
             [resultMessage setObject:[NSNumber numberWithBool:result == SM_TRUE] forKey:@"result"];
             [resultMessage setObject:@"Send Commands" forKey:@"title"];
             [resultMessage setObject:@"Printer Disconnected!" forKey:@"message"];
-            
+
             resolve(resultMessage);
-            
+
         };
     }
 }
@@ -211,22 +218,22 @@ RCT_REMAP_METHOD(print, portName:(NSString *)portName
                  rejecter:(RCTPromiseRejectBlock)reject)
 {
     NSString *portSettings = [self getPortSettingsOption:emulation];
-    
+
     StarIoExtEmulation Emulation = [self getEmulation:emulation];
-    
+
     ISCBBuilder *builder = [StarIoExt createCommandBuilder:Emulation];
-    
+
     [builder beginDocument];
-    
+
      [self appendCommands:builder
                printCommands:printCommands];
 
         [builder endDocument];
-    
+
     [builder endDocument];
-    
+
     if(portName != nil && portName != (id)[NSNull null]){
-    
+
     [Communication sendCommands:[builder.commands copy]
                        portName:portName
                    portSettings:portSettings
@@ -237,7 +244,7 @@ RCT_REMAP_METHOD(print, portName:(NSString *)portName
                       [resultMessage setObject:[NSNumber numberWithBool:result == SM_TRUE] forKey:@"result"];
                       [resultMessage setObject:title forKey:@"title"];
                       [resultMessage setObject:message forKey:@"message"];
-                      
+
                       resolve(resultMessage);
                   }else{
                       NSDictionary *userInfo = @{
@@ -259,7 +266,7 @@ RCT_REMAP_METHOD(print, portName:(NSString *)portName
                           [resultMessage setObject:[NSNumber numberWithBool:result == SM_TRUE] forKey:@"result"];
                           [resultMessage setObject:title forKey:@"title"];
                           [resultMessage setObject:message forKey:@"message"];
-                          
+
                           resolve(resultMessage);
                       }else{
                           NSDictionary *userInfo = @{
@@ -272,9 +279,9 @@ RCT_REMAP_METHOD(print, portName:(NSString *)portName
                           reject(title, message, error);
                       }
                   }];
-        
+
     }
-    
+
 }
 #pragma mark -
 #pragma mark Printer Events
@@ -351,7 +358,7 @@ RCT_REMAP_METHOD(print, portName:(NSString *)portName
 }
 
 - (void)sendData:(NSString *)dataType data:(NSString *)data {
-    
+
         NSMutableDictionary *dict = [[NSMutableDictionary alloc] init];
         [dict setObject:dataType forKey:@"dataType"];
         if (data != nil) {
@@ -377,7 +384,7 @@ RCT_REMAP_METHOD(print, portName:(NSString *)portName
 
 -(NSString *)getPortSettingsOption:(NSString *)emulation {
     NSString *portSettings = [NSString string];
-    
+
     if([emulation isEqualToString:@"EscPosMobile"]){
         portSettings = [@"mini" stringByAppendingString:portSettings];
     }else if([emulation isEqualToString:@"EscPos"]){
@@ -396,12 +403,12 @@ RCT_REMAP_METHOD(print, portName:(NSString *)portName
     [dict setObject:[NSNumber numberWithBool:status.cutterError == SM_TRUE] forKey:@"cutterError"];
     [dict setObject:[NSNumber numberWithBool:status.receiptPaperEmpty == SM_TRUE] forKey:@"receiptPaperEmpty"];
     [dict addEntriesFromDictionary:firmwareInformation];
-    
+
     return dict;
 }
 
 -(StarIoExtEmulation)getEmulation:(NSString *)emulation{
-    
+
     if([emulation isEqualToString:@"StarPRNT"]) return StarIoExtEmulationStarPRNT;
     else if ([emulation isEqualToString:@"StarPRNTL"]) return StarIoExtEmulationStarPRNTL;
     else if ([emulation isEqualToString:@"StarLine"]) return StarIoExtEmulationStarLine;
@@ -413,9 +420,9 @@ RCT_REMAP_METHOD(print, portName:(NSString *)portName
 }
 -(void)appendCommands:(ISCBBuilder *)builder
        printCommands:(NSArray *)printCommands {
-    
+
     NSStringEncoding encoding = NSASCIIStringEncoding;
-    
+
     for (id command in printCommands){
         if ([command valueForKey:@"appendInternational"]) [builder appendInternational:[self getInternational:[command valueForKey:@"appendInternational"]]];
         else if ([command valueForKey:@"appendCharacterSpace"]) [builder appendCharacterSpace:[[command valueForKey:@"appendCharacterSpace"] intValue]];
@@ -495,7 +502,7 @@ RCT_REMAP_METHOD(print, portName:(NSString *)portName
             SCBBarcodeWidth barcodeWidth = [self getBarcodeWidth:[command valueForKey:@"BarcodeWidth"]];
             int height = ([command valueForKey:@"height"]) ? [[command valueForKey:@"height"] intValue]: 40;
             BOOL hri = ([[command valueForKey:@"hri"] boolValue]  == NO) ? NO : YES;
-            
+
             if([command valueForKey:@"absolutePosition"]){
                 int position = ([[command valueForKey:@"absolutePosition"] intValue]) ? [[command valueForKey:@"absolutePosition"] intValue]: 40;
                 [builder appendBarcodeDataWithAbsolutePosition:[[command valueForKey:@"appendBarcode"] dataUsingEncoding:encoding]
@@ -508,13 +515,13 @@ RCT_REMAP_METHOD(print, portName:(NSString *)portName
             }
             else [builder appendBarcodeData:[[command valueForKey:@"appendBarcode"] dataUsingEncoding:encoding]
                                   symbology:barcodeSymbology width:barcodeWidth height:height hri:hri];
-            
+
         }
         else if ([command valueForKey:@"appendQrCode"]) {
             SCBQrCodeModel qrCodeModel = [self getQrCodeModel:[command valueForKey:@"QrCodeModel"]];
             SCBQrCodeLevel qrCodeLevel = [self getQrCodeLevel:[command valueForKey:@"QrCodeLevel"]];
             int cell = ([[command valueForKey:@"cell"] intValue]) ? [[command valueForKey:@"cell"] intValue]: 4;
-            
+
             if([command valueForKey:@"absolutePosition"]){
                 int position = ([[command valueForKey:@"absolutePosition"] intValue]) ? [[command valueForKey:@"absolutePosition"] intValue]: 40;
                 [builder appendQrCodeDataWithAbsolutePosition:[[command valueForKey:@"appendQrCode"] dataUsingEncoding:encoding]
@@ -544,7 +551,7 @@ RCT_REMAP_METHOD(print, portName:(NSString *)portName
             }
 
             UIImage *image = [UIImage imageWithData:imageData];
-            
+
             if([command valueForKey:@"absolutePosition"]){
                 int position = ([[command valueForKey:@"absolutePosition"] intValue]) ? [[command valueForKey:@"absolutePosition"] intValue]: 40;
                 [builder appendBitmapWithAbsolutePosition:image diffusion:diffusion width:width bothScale:bothScale rotation:rotation position:position];
@@ -556,6 +563,7 @@ RCT_REMAP_METHOD(print, portName:(NSString *)portName
             else [builder appendBitmap:image diffusion:diffusion width:width bothScale:bothScale rotation:rotation];
         }
         else if ([command valueForKey:@"appendBitmapText"]) {
+            RCTLogInfo(@"appendBitmapText ADD COMMAND DANKOV PRINT RCTLOGInfo");
             NSString *text = [command valueForKey:@"appendBitmapText"];
             NSInteger width = ([command valueForKey:@"width"]) ? [[command valueForKey:@"width"] intValue] : 576;
             NSString *fontName = ([command valueForKey:@"font"]) ? [command valueForKey:@"font"] : @"Menlo";
@@ -572,8 +580,21 @@ RCT_REMAP_METHOD(print, portName:(NSString *)portName
             }
             else [builder appendBitmap:image diffusion:NO];
         }
+        else if ([command valueForKey:@"appendHtml"]) {
+            NSString *html = [command valueForKey:@"appendHtml"];
+            NSInteger width = ([command valueForKey:@"width"]) ? [[command valueForKey:@"width"] intValue] : 576;
+            _image = nil;
+            RCTLogInfo(@"HTML have value - %@", html);
+            _webView = [[WKWebView alloc] initWithFrame:CGRectMake(0, 0, 120, 10)];
+            while (_image == nil) {
+                //wait for image to catched from webview
+            }
+            UIImage *image = _image;
+            [builder appendBitmap:image width:width];
+        }
+
     }
-    
+
 }
 #pragma mark -
 #pragma mark ISCBBuilder Constants
@@ -788,14 +809,40 @@ RCT_REMAP_METHOD(print, portName:(NSString *)portName
               @"StarLine" : @(StarIoExtEmulationStarLine)};
 };
 
+- (void)webView:(WKWebView *)webView didFinishNavigation:(WKNavigation *)navigation
+{
+    RCTLogInfo(@"PRINTING HTML WEB VIEW DID FINISH LOAD ");
+    UIImage* image = [self imageFromWebview:webView];
+    _image = image;
+}
+
+- (UIImage *) imageFromWebview:(UIWebView*) webview {
+    //store the original framesize to put it back after the snapshot
+    CGRect originalFrame = webview.frame;
+    //get the width and height of webpage using js (you might need to use another call, this doesn't work always)
+    NSInteger webViewHeight = [[webview stringByEvaluatingJavaScriptFromString:@"document.body.scrollHeight;"] integerValue];
+    NSInteger webViewWidth = [[webview stringByEvaluatingJavaScriptFromString:@"document.body.scrollWidth;"] integerValue];
+    //set the webview's frames to match the size of the page
+    [webview setFrame:CGRectMake(0, 0, webViewWidth, webViewHeight)];
+    //make the snapshot
+    UIGraphicsBeginImageContextWithOptions(webview.frame.size, false, 0.0);
+    [webview.layer renderInContext:UIGraphicsGetCurrentContext()];
+    UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    //set the webview's frame to the original size
+    [webview setFrame:originalFrame];
+    return image;
+}
+
+
 - (UIImage *)imageWithString:(NSString *)string font:(UIFont *)font width:(CGFloat)width {
     NSDictionary *attributeDic = @{NSFontAttributeName:font};
-    
+
     CGSize size = [string boundingRectWithSize:CGSizeMake(width, 10000)
                                        options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingTruncatesLastVisibleLine
                                     attributes:attributeDic
                                        context:nil].size;
-    
+
     if ([UIScreen.mainScreen respondsToSelector:@selector(scale)]) {
         if (UIScreen.mainScreen.scale == 2.0) {
             UIGraphicsBeginImageContextWithOptions(size, NO, 1.0);
@@ -805,29 +852,28 @@ RCT_REMAP_METHOD(print, portName:(NSString *)portName
     } else {
         UIGraphicsBeginImageContext(size);
     }
-    
+
     CGContextRef context = UIGraphicsGetCurrentContext();
-    
+
     [[UIColor whiteColor] set];
-    
+
     CGRect rect = CGRectMake(0, 0, size.width + 1, size.height + 1);
-    
+
     CGContextFillRect(context, rect);
-    
+
     NSDictionary *attributes = @ {
         NSForegroundColorAttributeName:[UIColor blackColor],
                    NSFontAttributeName:font
     };
-    
+
     [string drawInRect:rect withAttributes:attributes];
-    
+
     UIImage *imageToPrint = UIGraphicsGetImageFromCurrentImageContext();
-    
+
     UIGraphicsEndImageContext();
-    
+
     return imageToPrint;
 }
-
 @end
 
 
